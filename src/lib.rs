@@ -24,7 +24,7 @@
 ///
 mod models;
 
-use std::{time::Duration, net::Ipv4Addr};
+use std::{time::Duration, net::Ipv4Addr, sync::mpsc::RecvTimeoutError};
 use thiserror::Error;
 
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
@@ -38,6 +38,8 @@ pub enum NetworkTransferError {
     HttpError(#[from] ureq::Error),
     #[error("IO Error")]
     IoError(#[from] std::io::Error),
+    #[error("Timeout Error")]
+    TimeoutError(#[from] RecvTimeoutError),
 }
 
 #[derive(Debug)]
@@ -80,11 +82,11 @@ impl NetworkTransferProtocol {
         )?)
     }
 
-    pub fn discover(&self) -> Result<Vec<Console>, Box<dyn std::error::Error>> {
-        let mdns = ServiceDaemon::new().expect("Failed to create daemon");
+    pub fn discover(&self) -> Result<Vec<Console>, NetworkTransferError> {
+        let mdns = ServiceDaemon::new()?;
 
         // Browse for a service type.
-        let receiver = mdns.browse(Self::SERVICE_TYPE).expect("Failed to browse");
+        let receiver = mdns.browse(Self::SERVICE_TYPE)?;
 
         let (tx, rx) = std::sync::mpsc::channel();
 

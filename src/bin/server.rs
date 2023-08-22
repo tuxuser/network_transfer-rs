@@ -1,8 +1,8 @@
 use std::net::Ipv4Addr;
-
+use anyhow::{Result, Context};
 use network_transfer::{Console, NetworkTransferProtocol};
 
-fn main() {
+fn main() -> Result<()> {
     let protocol = NetworkTransferProtocol {};
 
     let console = Console {
@@ -12,5 +12,8 @@ fn main() {
         name: "XBOXTEST".into(),
     };
 
-    let _ = protocol.announce(&console);
+    let _ = protocol.announce(&console)
+        .context("Failed announcing network-transfer service")?;
+
+    Ok(())
 }
