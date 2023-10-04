@@ -1,3 +1,5 @@
+use std::io::Seek;
+
 use anyhow::{Result, Context};
 use network_transfer::{NetworkTransferProtocol, Client};
 
@@ -19,18 +21,13 @@ fn main() -> Result<()> {
         .context("Failed to get first item")?;
 
     eprintln!("Item: {item:#?}");
-    let resp = client.download_item(item)
+
+    let mut file = std::fs::File::create(&item.package_family_name)?;
+
+    let size = client.download_item(item, &mut file)
         .context("Failed downloading")?;
 
-    println!("{resp:?}");
-    let headers: Vec<Option<&str>> = resp
-        .headers_names()
-        .iter()
-        .map(
-            |k|
-                resp.header(k)
-        ).collect();
-    eprintln!("{:#?}", headers);
+    assert_eq!(size, file.stream_position()? as usize);
 
     Ok(())
 }

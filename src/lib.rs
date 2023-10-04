@@ -30,6 +30,8 @@ use thiserror::Error;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use url::Url;
 
+const CHUNK_SIZE: usize = 0x10000;
+
 #[derive(Error, Debug)]
 pub enum NetworkTransferError {
     #[error("MDNS Error")]
@@ -40,6 +42,8 @@ pub enum NetworkTransferError {
     IoError(#[from] std::io::Error),
     #[error("Timeout Error")]
     TimeoutError(#[from] RecvTimeoutError),
+    #[error("GeneralError")]
+    GeneralError(String),
 }
 
 #[derive(Debug)]
@@ -170,18 +174,58 @@ impl Client {
         Ok(resp)
     }
 
-    pub fn download(&self, path: &str) -> Result<ureq::Response, NetworkTransferError> {
+    pub fn download(&self, path: &str, range: Option<(usize, usize)>) -> Result<ureq::Response, NetworkTransferError> {
         let url = self.get_url(path);
+
+        let range_val = range.unwrap_or((0,0));
+
         let resp = self.client
             .get(url.as_ref())
-            .set("range", "bytes=0-0")
+            .set("range", &format!("bytes={}-{}", range_val.0, range_val.1))
             .call()?;
 
         Ok(resp)
     }
 
-    pub fn download_item(&self, item: &models::MetadataItem) -> Result<ureq::Response, NetworkTransferError> {
-        self.download(&item.path)
+    pub fn download_item(&self, item: &models::MetadataItem, writer: &mut impl std::io::Write) -> Result<usize, NetworkTransferError> {
+        let resp = self.download(&item.path, None)?;
+        println!("{resp:?}");
+        let headers: Vec<String> = resp
+        .headers_names()
+        .into_iter()
+        .map(|k| {
+            let hdr_name = k.clone();
+            format!("{k}: {}", resp.header(hdr_name.as_ref()).unwrap_or("<NOT_SET>"))
+        }).collect();
+
+        dbg!(headers);
+        assert_eq!(resp.status(), 206, "Unexpected HTTP status, expected 206");
+
+        let content_length = match resp.header("content-range") {
+            Some(content_range) => {
+                let content_length = content_range.split('/')
+                    .last()
+                    .ok_or(NetworkTransferError::GeneralError("Failed to get full content length".to_owned()))?;
+
+                content_length.parse::<usize>()
+                    .map_err(|_|NetworkTransferError::GeneralError("Failed to parse content length".to_owned()))?
+            },
+            None => Err(NetworkTransferError::GeneralError("No content-range header returned".to_owned()))?,
+        };
+
+        dbg!(content_length);
+
+        let mut buf = [0u8; CHUNK_SIZE];
+        for offset in (0..content_length).step_by(CHUNK_SIZE) {
+            let size = std::cmp::min(CHUNK_SIZE, content_length - offset);
+            let resp = self.download(&item.path, Some((offset, offset + size)))?;
+
+            resp.into_reader().read_exact(&mut buf[..size])?;
+            let written = writer.write(&buf[..size])?;
+            assert_eq!(written, size)
+        }
+
+        Ok(content_length)
     }
 }
 
