@@ -7,13 +7,20 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
+hex = "0.4.3"
 mdns-sd = "0.7.2"
 network-interface = "1.0.3"
+rand = "0.8.5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
+axum = { version = "0.6.20", features = ["json", "headers", "tracing"] }
+tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread"] }
 ureq = { version = "2.6.2", features = ["json", "serde", "serde_json"] }
 url = "2.3.1"
+uuid = { version = "1.4.1", features = ["v4"] }
+axum-range = "0.3.0"
+hexdump = "0.1.1"
 
 [[bin]]
 name = "client"

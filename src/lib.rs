@@ -30,7 +30,26 @@ use thiserror::Error;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use url::Url;
 
-const CHUNK_SIZE: usize = 0x10000;
+//const CHUNK_SIZE: usize = 0x1000;
+
+#[derive(Debug, PartialEq, Eq, Default)]
+pub struct Range {
+    first_byte: usize,
+    last_byte: usize,
+}
+
+impl Range {
+    pub fn new(first: usize, last: usize) -> Self {
+        Self {
+            first_byte: first,
+            last_byte: last
+        }
+    }
+
+    pub fn count(&self) -> usize {
+        self.last_byte - self.first_byte + 1
+    }
+}
 
 #[derive(Error, Debug)]
 pub enum NetworkTransferError {
@@ -168,27 +187,38 @@ impl Client {
 
         let resp = self.client
             .get(url.as_ref())
+            .set("Accept", "application/json")
+            .set("user-agent", "CopyOnLanSvc")
+            .set("x-contract-version", "1")
             .call()?
             .into_json::<models::Metadata>()?;
 
         Ok(resp)
     }
 
-    pub fn download(&self, path: &str, range: Option<(usize, usize)>) -> Result<ureq::Response, NetworkTransferError> {
+    pub fn download(&self, path: &str, range: &Range) -> Result<ureq::Response, NetworkTransferError> {
         let url = self.get_url(path);
-
-        let range_val = range.unwrap_or((0,0));
 
         let resp = self.client
             .get(url.as_ref())
-            .set("range", &format!("bytes={}-{}", range_val.0, range_val.1))
+            .set("range", &format!("bytes={}-{}", range.first_byte, range.last_byte))
             .call()?;
 
         Ok(resp)
     }
 
+    pub fn iterate_range(size: usize, step_size: usize) -> impl Iterator<Item = Range> {
+        (0..size).step_by(step_size).map(move |offset| {
+            let size = std::cmp::min(step_size, size - offset);
+            Range {
+                first_byte: offset,
+                last_byte: offset + size - 1
+            }
+        }).into_iter()
+    }
+
     pub fn download_item(&self, item: &models::MetadataItem, writer: &mut impl std::io::Write) -> Result<usize, NetworkTransferError> {
-        let resp = self.download(&item.path, None)?;
+        let resp = self.download(&item.path, &Range::default())?;
         println!("{resp:?}");
         let headers: Vec<String> = resp
         .headers_names()
@@ -215,14 +245,17 @@ impl Client {
 
         dbg!(content_length);
 
-        let mut buf = [0u8; CHUNK_SIZE];
-        for offset in (0..content_length).step_by(CHUNK_SIZE) {
-            let size = std::cmp::min(CHUNK_SIZE, content_length - offset);
-            let resp = self.download(&item.path, Some((offset, offset + size)))?;
+        const STEP_SIZE: usize = 0x1000;
+        let mut buf = [0u8; STEP_SIZE];
+        for range in Self::iterate_range(content_length, STEP_SIZE) {
+            let resp = self.download(&item.path, &range)?;
 
-            resp.into_reader().read_exact(&mut buf[..size])?;
-            let written = writer.write(&buf[..size])?;
-            assert_eq!(written, size)
+            println!("range={}-{}", range.first_byte, range.last_byte);
+            // dbg!(&resp);
+
+            resp.into_reader().read_exact(&mut buf[..range.count()])?;
+            let written = writer.write(&buf[..range.count()])?;
+            assert_eq!(written, range.count())
         }
 
         Ok(content_length)
@@ -268,5 +301,15 @@ mod tests {
         assert_eq!(info.get_properties().len(), 2);
         assert_eq!(info.get_property_val_str("N"), Some("TESTXBOX"));
         assert_eq!(info.get_property_val_str("U"), Some("X92348235235"));
+    }
+
+    #[test]
+    fn test_range_iterator() {
+        let mut it1 = Client::iterate_range(4200, 1024);
+        assert_eq!(Range::new(0,1023), it1.next().unwrap());
+        assert_eq!(Range::new(1024,2047), it1.next().unwrap());
+        assert_eq!(Range::new(2048,3071), it1.next().unwrap());
+        assert_eq!(Range::new(3072,4095), it1.next().unwrap());
+        assert_eq!(Range::new(4096,4199), it1.next().unwrap());
     }
 }
