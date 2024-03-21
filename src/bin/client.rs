@@ -1,9 +1,12 @@
 use std::io::Seek;
 
 use anyhow::{Result, Context};
+use env_logger::Env;
 use network_transfer::{NetworkTransferProtocol, Client};
 
 fn main() -> Result<()> {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+
     let protocol = NetworkTransferProtocol {};
     let results = protocol.discover()
         .context("No network-transfer activate console found :(")?;
@@ -11,7 +14,7 @@ fn main() -> Result<()> {
     let console = results.first()
         .context("Failed unwrapping console")?;
     
-    eprintln!("Using console: {console:#?}");
+    log::info!("Using console: {console:#?}");
 
     let client = Client::from(console);
     let metadata = client.get_metadata()
@@ -20,7 +23,7 @@ fn main() -> Result<()> {
     let item = metadata.items.first()
         .context("Failed to get first item")?;
 
-    eprintln!("Item: {item:#?}");
+    log::info!("Item: {item:#?}");
 
     let mut file = std::fs::File::create(&item.package_family_name)?;
 

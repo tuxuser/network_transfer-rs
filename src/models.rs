@@ -62,7 +62,7 @@ mod tests {
     
         let first = deserialized.items.first().expect("Failed getting first entry");
         assert_eq!(first.typ, "app");
-        assert_eq!(first.has_content_id, false);
+        assert!(!first.has_content_id);
         assert_eq!(first.content_id, "");
         assert_eq!(first.product_id, "");
         assert_eq!(first.package_family_name, "11032Reconco.XboxControllerTester_thvmwcgtjwwvy");

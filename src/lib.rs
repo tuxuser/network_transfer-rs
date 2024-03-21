@@ -22,15 +22,21 @@
 /// }
 ///
 ///
-mod models;
+pub mod models;
+pub mod error;
 
-use std::{time::Duration, net::Ipv4Addr, sync::mpsc::RecvTimeoutError};
-use thiserror::Error;
-
+use std::{time::Duration, net::Ipv4Addr};
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
+use rand::{thread_rng, Rng};
 use url::Url;
+use crate::error::Error;
 
 //const CHUNK_SIZE: usize = 0x1000;
+
+pub fn generate_random_console_id() -> String {
+    let arr1: [u8; 6] = thread_rng().gen();
+    format!("X{}", hex::encode(arr1))
+}
 
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct Range {
@@ -49,20 +55,6 @@ impl Range {
     pub fn count(&self) -> usize {
         self.last_byte - self.first_byte + 1
     }
-}
-
-#[derive(Error, Debug)]
-pub enum NetworkTransferError {
-    #[error("MDNS Error")]
-    MdnsError(#[from] mdns_sd::Error),
-    #[error("HTTP Error")]
-    HttpError(#[from] ureq::Error),
-    #[error("IO Error")]
-    IoError(#[from] std::io::Error),
-    #[error("Timeout Error")]
-    TimeoutError(#[from] RecvTimeoutError),
-    #[error("GeneralError")]
-    GeneralError(String),
 }
 
 #[derive(Debug)]
@@ -91,7 +83,7 @@ impl NetworkTransferProtocol {
     pub const SERVICE_TYPE: &'static str = "_xboxcol._tcp.local.";
     pub const SERVICE_PORT: u16 = 10248;
 
-    fn build_service_info(console_info: &Console) -> Result<ServiceInfo, NetworkTransferError> {
+    fn build_service_info(console_info: &Console) -> Result<ServiceInfo, Error> {
         let hostname = console_info.name.to_string() + ".local.";
         let properties = [("N", &console_info.name), ("U", &console_info.id)];
 
@@ -105,7 +97,7 @@ impl NetworkTransferProtocol {
         )?)
     }
 
-    pub fn discover(&self) -> Result<Vec<Console>, NetworkTransferError> {
+    pub fn discover(&self) -> Result<Vec<Console>, Error> {
         let mdns = ServiceDaemon::new()?;
 
         // Browse for a service type.
@@ -119,7 +111,7 @@ impl NetworkTransferProtocol {
         std::thread::spawn(move || {
             while let Ok(event) = receiver.recv() {
                 if let ServiceEvent::ServiceResolved(info) = event {
-                    eprintln!(
+                    log::info!(
                         "Resolved a new service: {} -> {:?}",
                         info.get_fullname(),
                         info
@@ -134,7 +126,7 @@ impl NetworkTransferProtocol {
         Ok(vec![Console::from(result)])
     }
 
-    pub fn announce(&self, console_info: &Console) -> Result<(), NetworkTransferError> {
+    pub fn announce(&self, console_info: &Console) -> Result<(), Error> {
         // Create a daemon
         let mdns = ServiceDaemon::new()?;
 
@@ -182,7 +174,7 @@ impl Client {
         url
     }
  
-    pub fn get_metadata(&self) -> Result<models::Metadata, NetworkTransferError> {
+    pub fn get_metadata(&self) -> Result<models::Metadata, Error> {
         let url = self.get_url("/col/metadata");
 
         let resp = self.client
@@ -190,19 +182,21 @@ impl Client {
             .set("Accept", "application/json")
             .set("user-agent", "CopyOnLanSvc")
             .set("x-contract-version", "1")
-            .call()?
+            .call()
+            .map_err(Box::new)?
             .into_json::<models::Metadata>()?;
 
         Ok(resp)
     }
 
-    pub fn download(&self, path: &str, range: &Range) -> Result<ureq::Response, NetworkTransferError> {
+    pub fn download(&self, path: &str, range: &Range) -> Result<ureq::Response, Error> {
         let url = self.get_url(path);
 
         let resp = self.client
             .get(url.as_ref())
             .set("range", &format!("bytes={}-{}", range.first_byte, range.last_byte))
-            .call()?;
+            .call()
+            .map_err(Box::new)?;
 
         Ok(resp)
     }
@@ -214,12 +208,12 @@ impl Client {
                 first_byte: offset,
                 last_byte: offset + size - 1
             }
-        }).into_iter()
+        })
     }
 
-    pub fn download_item(&self, item: &models::MetadataItem, writer: &mut impl std::io::Write) -> Result<usize, NetworkTransferError> {
+    pub fn download_item(&self, item: &models::MetadataItem, writer: &mut impl std::io::Write) -> Result<usize, Error> {
         let resp = self.download(&item.path, &Range::default())?;
-        println!("{resp:?}");
+        log::trace!("{resp:?}");
         let headers: Vec<String> = resp
         .headers_names()
         .into_iter()
@@ -235,12 +229,12 @@ impl Client {
             Some(content_range) => {
                 let content_length = content_range.split('/')
                     .last()
-                    .ok_or(NetworkTransferError::GeneralError("Failed to get full content length".to_owned()))?;
+                    .ok_or(Error::GeneralError("Failed to get full content length".to_owned()))?;
 
                 content_length.parse::<usize>()
-                    .map_err(|_|NetworkTransferError::GeneralError("Failed to parse content length".to_owned()))?
+                    .map_err(|_|Error::GeneralError("Failed to parse content length".to_owned()))?
             },
-            None => Err(NetworkTransferError::GeneralError("No content-range header returned".to_owned()))?,
+            None => Err(Error::GeneralError("No content-range header returned".to_owned()))?,
         };
 
         dbg!(content_length);
@@ -250,7 +244,7 @@ impl Client {
         for range in Self::iterate_range(content_length, STEP_SIZE) {
             let resp = self.download(&item.path, &range)?;
 
-            println!("range={}-{}", range.first_byte, range.last_byte);
+            log::trace!("range={}-{}", range.first_byte, range.last_byte);
             // dbg!(&resp);
 
             resp.into_reader().read_exact(&mut buf[..range.count()])?;
