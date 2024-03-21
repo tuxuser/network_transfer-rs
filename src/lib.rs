@@ -189,7 +189,17 @@ impl Client {
         Ok(resp)
     }
 
-    pub fn download(&self, path: &str, range: &Range) -> Result<ureq::Response, Error> {
+    pub fn iterate_range(size: usize, step_size: usize) -> impl Iterator<Item = Range> {
+        (0..size).step_by(step_size).map(move |offset| {
+            let size = std::cmp::min(step_size, size - offset);
+            Range {
+                first_byte: offset,
+                last_byte: offset + size - 1
+            }
+        })
+    }
+
+    pub fn download_chunk(&self, path: &str, range: &Range) -> Result<ureq::Response, Error> {
         let url = self.get_url(path);
 
         let resp = self.client
@@ -201,18 +211,8 @@ impl Client {
         Ok(resp)
     }
 
-    pub fn iterate_range(size: usize, step_size: usize) -> impl Iterator<Item = Range> {
-        (0..size).step_by(step_size).map(move |offset| {
-            let size = std::cmp::min(step_size, size - offset);
-            Range {
-                first_byte: offset,
-                last_byte: offset + size - 1
-            }
-        })
-    }
-
-    pub fn download_item(&self, item: &models::MetadataItem, writer: &mut impl std::io::Write) -> Result<usize, Error> {
-        let resp = self.download(&item.path, &Range::default())?;
+    pub fn get_item_filesize(&self, item: &models::MetadataItem) -> Result<usize, Error> {
+        let resp = self.download_chunk(&item.path, &Range::default())?;
         log::trace!("{resp:?}");
         let headers: Vec<String> = resp
         .headers_names()
@@ -237,22 +237,23 @@ impl Client {
             None => Err(Error::GeneralError("No content-range header returned".to_owned()))?,
         };
 
+        Ok(content_length)
+    }
+
+    pub fn download_chunks(&self, item: &models::MetadataItem, content_length: usize, writer: &mut impl std::io::Write, chunk_size: usize) -> Result<usize, Error>  {
         dbg!(content_length);
 
-        const STEP_SIZE: usize = 0x1000;
-        let mut buf = [0u8; STEP_SIZE];
-        for range in Self::iterate_range(content_length, STEP_SIZE) {
-            let resp = self.download(&item.path, &range)?;
+        let mut buf = vec![0u8; chunk_size];
+        let written: usize = Self::iterate_range(content_length, chunk_size).into_iter().map(move |range|{
+            let resp = self.download_chunk(&item.path, &range).unwrap();
+            resp.into_reader().read_exact(&mut buf).unwrap();
+            writer.write(&buf).unwrap();
 
-            log::trace!("range={}-{}", range.first_byte, range.last_byte);
-            // dbg!(&resp);
+            range.count()
+        }).sum();
 
-            resp.into_reader().read_exact(&mut buf[..range.count()])?;
-            let written = writer.write(&buf[..range.count()])?;
-            assert_eq!(written, range.count())
-        }
-
-        Ok(content_length)
+        assert_eq!(written, content_length);
+        Ok(written)
     }
 }
 
