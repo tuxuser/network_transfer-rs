@@ -31,7 +31,7 @@ use rand::{thread_rng, Rng};
 use url::Url;
 use crate::error::Error;
 
-//const CHUNK_SIZE: usize = 0x1000;
+pub const SERVER_PORT: u16 = 10248;
 
 pub fn generate_random_console_id() -> String {
     let arr1: [u8; 6] = thread_rng().gen();
@@ -244,12 +244,10 @@ impl Client {
         dbg!(content_length);
 
         let mut buf = vec![0u8; chunk_size];
-        let written: usize = Self::iterate_range(content_length, chunk_size).into_iter().map(move |range|{
+        let written: usize = Self::iterate_range(content_length, chunk_size).map(move |range|{
             let resp = self.download_chunk(&item.path, &range).unwrap();
-            resp.into_reader().read_exact(&mut buf).unwrap();
-            writer.write(&buf).unwrap();
-
-            range.count()
+            resp.into_reader().read_exact(&mut buf[..range.count()]).unwrap();
+            writer.write(&buf[..range.count()]).unwrap()
         }).sum();
 
         assert_eq!(written, content_length);
@@ -268,6 +266,13 @@ mod tests {
     use std::net::Ipv4Addr;
 
     use super::*;
+
+    #[test]
+    fn test_generate_console_id() {
+        let cid = generate_random_console_id();
+        assert!(cid.starts_with("X"));
+        assert_eq!(cid.len(), "X1234567890AB".len());
+    }
 
     #[test]
     fn test_build_service_info() {

@@ -43,8 +43,8 @@ mod tests {
                     "productId": "",
                     "packageFamilyName": "11032Reconco.XboxControllerTester_thvmwcgtjwwvy",
                     "oneStoreProductId": "9NBLGGH4PNC7",
-                    "version": "281505043185734",
-                    "size": 11879607,
+                    "version": "0",
+                    "size": 0,
                     "allowedProductId": "",
                     "allowedPackageFamilyName": "",
                     "path": "/col/content/%7BA89ECE52-7E8E-444F-BBD0-C68B76C2ECA4%7D%2311032Reconco.XboxControllerTester_thvmwcgtjwwvy",
@@ -67,8 +67,8 @@ mod tests {
         assert_eq!(first.product_id, "");
         assert_eq!(first.package_family_name, "11032Reconco.XboxControllerTester_thvmwcgtjwwvy");
         assert_eq!(first.one_store_product_id, "9NBLGGH4PNC7");
-        assert_eq!(first.version, "281505043185734");
-        assert_eq!(first.size, 11879607);
+        assert_eq!(first.version, "0");
+        assert_eq!(first.size, 0);
         assert_eq!(first.allowed_product_id, "");
         assert_eq!(first.allowed_package_family_name, "");
         assert_eq!(first.path, "/col/content/%7BA89ECE52-7E8E-444F-BBD0-C68B76C2ECA4%7D%2311032Reconco.XboxControllerTester_thvmwcgtjwwvy");

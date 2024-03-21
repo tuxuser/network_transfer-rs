@@ -8,7 +8,7 @@ use network_transfer::{models::MetadataItem, Client, NetworkTransferProtocol};
 const STEP_SIZE: usize = 0x10000;
 
 fn download_with_progress(client: &Client, item: &MetadataItem, writer: &mut (impl std::io::Write + std::io::Seek)) -> Result<usize> {
-    let content_length = client.get_item_filesize(&item)?;
+    let content_length = client.get_item_filesize(item)?;
     dbg!(content_length);
 
     let progress_style = ProgressStyle::with_template("[{elapsed_precise}] [ETA: {eta}] {bar:40.cyan/blue} {bytes:>7}/{total_bytes:7} ({bytes_per_sec}) {msg}")?;
@@ -16,13 +16,13 @@ fn download_with_progress(client: &Client, item: &MetadataItem, writer: &mut (im
         .with_style(progress_style);
 
     let mut buf = vec![0u8; STEP_SIZE];
-    let written: usize = Client::iterate_range(content_length, STEP_SIZE).into_iter().map(move |range|{
+    let written: usize = Client::iterate_range(content_length, STEP_SIZE).map(move |range|{
         let resp = client.download_chunk(&item.path, &range).unwrap();
         resp.into_reader().read_exact(&mut buf[..range.count()]).unwrap();
-        writer.write(&buf[..range.count()]).unwrap();
-        progress.inc(range.count() as u64);
+        let wrote = writer.write(&buf[..range.count()]).unwrap();
+        progress.inc(wrote as u64);
 
-        range.count()
+        wrote
     })
     .sum();
 

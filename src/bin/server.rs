@@ -2,19 +2,13 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use anyhow::{anyhow, Result};
 use axum_range::{KnownSize, Ranged};
 use env_logger::Env;
-use network_transfer::{generate_random_console_id, Console, NetworkTransferProtocol};
+use network_transfer::{generate_random_console_id, models::{Metadata, MetadataItem}, Console, NetworkTransferProtocol};
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use axum::{
-    extract::{Json, TypedHeader, Path},
-    http::{Request, header::HeaderMap},
-    body::Body,
-    headers::Range,
-    response::IntoResponse,
-    routing::get,
-    Router,
+    body::Body, extract::{Json, Path, TypedHeader}, headers::Range, http::{header::HeaderMap, Request}, response::IntoResponse, routing::get, Router
 };
 use serde_json::json;
-use network_transfer::error::Error;
+use network_transfer::{error::Error, SERVER_PORT};
 
 fn get_network_interfaces() -> Result<Vec<NetworkInterface>> {
     let interfaces: Vec<NetworkInterface> = NetworkInterface::show()?
@@ -86,7 +80,7 @@ async fn main() -> Result<()> {
 
     let console = Console {
         address: bind_addr,
-        port: 10248,
+        port: SERVER_PORT,
         id: console_id,
         name: "XBOXTEST".into(),
     };
@@ -102,8 +96,9 @@ async fn main() -> Result<()> {
         .route("/col/content/:filename", get(get_content))
         .fallback(fallback_handler);
 
+    log::info!("Running HTTP Server @ {bind_addr}:{SERVER_PORT}");
     // run it with hyper on localhost:3000
-    axum::Server::bind(&SocketAddr::new(IpAddr::V4(bind_addr), 10248))
+    axum::Server::bind(&SocketAddr::new(IpAddr::V4(bind_addr), SERVER_PORT))
         .serve(app.into_make_service())
         .await?;
 
@@ -138,25 +133,28 @@ async fn fallback_handler(request: Request<Body>) {
 async fn get_metadata(headers: HeaderMap) -> impl IntoResponse {
     dbg!(headers);
 
-    let body = Json(json!(
-        {"items":[{
-            "type": "app",
-            "hasContentId": false,
-            "contentId": "",
-            "productId": "",
-            "packageFamilyName": "11032Reconco.XboxControllerTester_thvmwcgtjwwvy",
-            "oneStoreProductId": "9NBLGGH4PNC7",
-            "version": "281505043185734",
-            "size": 105205760,
-            "allowedProductId": "",
-            "allowedPackageFamilyName": "",
-            "path": "/col/content/%7BA89ECE52-7E8E-444F-BBD0-C68B76C2ECA4%7D%2311032Reconco.XboxControllerTester_thvmwcgtjwwvy",
-            "availability": "available",
-            "generation": "uwpgen9",
-            "relatedMedia": [],
-            "relatedMediaFamilyNames": []
-        }]}
-    ));
+    let body = Json(json!(Metadata {
+        items: vec![
+            MetadataItem {
+                typ: "app".into(),
+                is_xvc: None,
+                has_content_id: false,
+                content_id: String::new(),
+                product_id: String::new(),
+                package_family_name: "11032Reconco.XboxControllerTester_thvmwcgtjwwvy".into(),
+                one_store_product_id: "9NBLGGH4PNC7".into(),
+                version: "0".into(),
+                size: 0,
+                allowed_product_id: "".into(),
+                allowed_package_family_name: "".into(),
+                path: "/col/content/%767601B6E-0294-4007-8682-BEBFBE676320%7D%2311032Reconco.XboxControllerTester_thvmwcgtjwwvy".into(),
+                availability: "available".into(),
+                generation: "uwpgen9".into(),
+                related_media: vec![],
+                related_media_family_names: vec![]
+            }
+        ]
+    }));
 
     (
         [
