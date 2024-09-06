@@ -6,6 +6,7 @@ pub struct MetadataItem {
     #[serde(rename = "type")]
     pub typ: String,
     pub has_content_id: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub is_xvc: Option<bool>,
     pub content_id: String,
     pub product_id: String,
