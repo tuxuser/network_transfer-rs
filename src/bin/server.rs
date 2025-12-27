@@ -2,7 +2,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use anyhow::{anyhow, Result};
 use axum_range::{KnownSize, Ranged};
 use env_logger::Env;
-use network_transfer::{generate_random_console_id, models::{Metadata, MetadataItem}, Console, NetworkTransferProtocol};
+use network_transfer::{generate_random_console_id, models::Metadata, Console, NetworkTransferProtocol};
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use axum::{
     body::Body, extract::{Json, Path, TypedHeader}, headers::Range, http::{header::HeaderMap, Request}, response::IntoResponse, routing::get, Router
@@ -25,6 +25,8 @@ fn choose_bind_addr(interfaces: &[NetworkInterface]) -> Result<Ipv4Addr> {
     for (idx, intf) in interfaces.iter().enumerate() {
         println!("{idx}) {} ({:?})", intf.name, intf.addr)
     }
+
+    println!("Type desired interface number and hit [ENTER]: ");
 
     let mut input = String::new();
     std::io::stdin()
@@ -133,28 +135,9 @@ async fn fallback_handler(request: Request<Body>) {
 async fn get_metadata(headers: HeaderMap) -> impl IntoResponse {
     dbg!(headers);
 
-    let body = Json(json!(Metadata {
-        items: vec![
-            MetadataItem {
-                typ: "app".into(),
-                is_xvc: None,
-                has_content_id: false,
-                content_id: String::new(),
-                product_id: String::new(),
-                package_family_name: "11032Reconco.XboxControllerTester_thvmwcgtjwwvy".into(),
-                one_store_product_id: "9NBLGGH4PNC7".into(),
-                version: "0".into(),
-                size: 0,
-                allowed_product_id: "".into(),
-                allowed_package_family_name: "".into(),
-                path: "/col/content/%767601B6E-0294-4007-8682-BEBFBE676320%7D%2311032Reconco.XboxControllerTester_thvmwcgtjwwvy".into(),
-                availability: "available".into(),
-                generation: "uwpgen9".into(),
-                related_media: vec![],
-                related_media_family_names: vec![]
-            }
-        ]
-    }));
+    let fs = std::fs::File::open("metadata.json").unwrap();
+    let metadata: Metadata = serde_json::from_reader(fs).unwrap();
+    let body = Json(json!(metadata));
 
     (
         [
@@ -193,9 +176,11 @@ async fn get_content(Path(filename): Path<String>, range: Option<TypedHeader<Ran
 
     let (_drive_id, filename) = {
         let mut pair = filename.split('#');
-        let drive_id = uuid::Uuid::parse_str(pair.next().unwrap()).unwrap();
+        let drive_id = pair.next().unwrap();
         (drive_id, pair.next().unwrap().to_owned())
     };
+
+    dbg!(&filename);
 
     let file = tokio::fs::File::open(&filename).await.unwrap();
     let body = KnownSize::file(file).await.unwrap();

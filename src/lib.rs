@@ -121,7 +121,7 @@ impl NetworkTransferProtocol {
             }
         });
 
-        let result = rx.recv_timeout(Duration::from_secs(60))?;
+        let result = rx.recv_timeout(Duration::from_secs(10))?;
 
         Ok(vec![Console::from(result)])
     }
@@ -253,12 +253,6 @@ impl Client {
         assert_eq!(written, content_length);
         Ok(written)
     }
-}
-
-struct Server;
-
-impl Server {
-
 }
 
 #[cfg(test)]

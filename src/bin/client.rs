@@ -32,9 +32,10 @@ fn download_with_progress(client: &Client, item: &MetadataItem, writer: &mut (im
 fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
+    println!("Attempting console discovery...");
     let protocol = NetworkTransferProtocol {};
     let results = protocol.discover()
-        .context("No network-transfer activate console found :(")?;
+        .context("No network-transfer activated console found :(")?;
 
     let console = results.first()
         .context("Failed unwrapping console")?;

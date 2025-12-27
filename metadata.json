@@ -1,0 +1,21 @@
+{
+    "items": [
+        {
+            "type": "app",
+            "hasContentId": false,
+            "contentId": "",
+            "productId": "",
+            "packageFamilyName": "27878ConstantineTarasenko.458004FD2C47C_c8b3w9r5va522",
+            "oneStoreProductId": "",
+            "version": "281474976841728",
+            "size": 92659712,
+            "allowedProductId": "",
+            "allowedPackageFamilyName": "",
+            "path": "/col/content/%7BDC5D9283-5BD8-11EF-BDBF-806E6F6E6963%7D%2327878ConstantineTarasenko.458004FD2C47C_c8b3w9r5va522",
+            "availability": "available",
+            "generation": "uwpgen8",
+            "relatedMedia": [],
+            "relatedMediaFamilyNames": []
+        }
+    ]
+}
